@@ -3,7 +3,6 @@ package cc.coopersoft.common;
 import org.keycloak.services.validation.Validation;
 
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 public class OptionalUtils {
 

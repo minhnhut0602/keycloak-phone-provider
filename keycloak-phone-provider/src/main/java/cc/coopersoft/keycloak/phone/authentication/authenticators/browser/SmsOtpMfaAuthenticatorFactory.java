@@ -1,6 +1,5 @@
 package cc.coopersoft.keycloak.phone.authentication.authenticators.browser;
 
-import cc.coopersoft.keycloak.phone.authentication.authenticators.resetcred.ResetCredentialWithPhone;
 import org.keycloak.Config.Scope;
 import org.keycloak.authentication.Authenticator;
 import org.keycloak.authentication.AuthenticatorFactory;
@@ -10,10 +9,7 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.provider.ProviderConfigProperty;
 
-import java.util.Collections;
 import java.util.List;
-
-import static org.keycloak.provider.ProviderConfigProperty.STRING_TYPE;
 
 public class SmsOtpMfaAuthenticatorFactory implements AuthenticatorFactory, ConfigurableAuthenticatorFactory {
 

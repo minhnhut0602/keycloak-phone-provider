@@ -9,6 +9,11 @@ import cc.coopersoft.keycloak.phone.credential.PhoneOtpCredentialProvider;
 import cc.coopersoft.keycloak.phone.credential.PhoneOtpCredentialProviderFactory;
 import cc.coopersoft.keycloak.phone.providers.constants.TokenCodeType;
 import cc.coopersoft.keycloak.phone.providers.spi.PhoneProvider;
+import cc.coopersoft.keycloak.phone.providers.spi.TokenCodeDTO;
+import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.spi.HttpResponse;
 import org.keycloak.authentication.AuthenticationFlowContext;
@@ -17,16 +22,12 @@ import org.keycloak.authentication.Authenticator;
 import org.keycloak.authentication.CredentialValidator;
 import org.keycloak.common.util.ServerCookie;
 import org.keycloak.credential.CredentialProvider;
-import org.keycloak.models.*;
-import org.keycloak.models.credential.dto.OTPSecretData;
+import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserCredentialModel;
+import org.keycloak.models.UserModel;
 import org.keycloak.services.validation.Validation;
-import org.keycloak.util.JsonSerialization;
 
-import javax.ws.rs.ForbiddenException;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.Response;
-import java.io.IOException;
 import java.net.URI;
 import java.util.Optional;
 
@@ -130,11 +131,11 @@ public class SmsOtpMfaAuthenticator implements Authenticator, CredentialValidato
 
     PhoneProvider phoneProvider = context.getSession().getProvider(PhoneProvider.class);
     try {
-      int expires = phoneProvider.sendTokenCode(phoneNumber,context.getConnection().getRemoteAddr(),
+      TokenCodeDTO tokenCodeDTO = phoneProvider.sendTokenCode(phoneNumber,context.getConnection().getRemoteAddr(),
           TokenCodeType.OTP, null);
       context.form()
           .setInfo("codeSent", phoneNumber)
-          .setAttribute("expires", expires)
+          .setAttribute("expires", tokenCodeDTO.getExpiresIn())
           .setAttribute("initSend",true);
     } catch (ForbiddenException e) {
       logger.warn("otp send code Forbidden Exception!", e);

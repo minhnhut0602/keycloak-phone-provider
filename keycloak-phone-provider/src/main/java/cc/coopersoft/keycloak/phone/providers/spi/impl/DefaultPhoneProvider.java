@@ -1,19 +1,20 @@
 package cc.coopersoft.keycloak.phone.providers.spi.impl;
 
 import cc.coopersoft.common.OptionalUtils;
-import cc.coopersoft.keycloak.phone.providers.spi.PhoneProvider;
-import cc.coopersoft.keycloak.phone.providers.spi.PhoneVerificationCodeProvider;
 import cc.coopersoft.keycloak.phone.providers.constants.TokenCodeType;
 import cc.coopersoft.keycloak.phone.providers.exception.MessageSendException;
 import cc.coopersoft.keycloak.phone.providers.representations.TokenCodeRepresentation;
 import cc.coopersoft.keycloak.phone.providers.spi.MessageSenderService;
+import cc.coopersoft.keycloak.phone.providers.spi.PhoneProvider;
+import cc.coopersoft.keycloak.phone.providers.spi.PhoneVerificationCodeProvider;
+import cc.coopersoft.keycloak.phone.providers.spi.TokenCodeDTO;
+import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import org.jboss.logging.Logger;
 import org.keycloak.Config.Scope;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.services.validation.Validation;
 
-import javax.ws.rs.ForbiddenException;
-import javax.ws.rs.ServiceUnavailableException;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -115,9 +116,11 @@ public class DefaultPhoneProvider implements PhoneProvider {
     }
 
     @Override
-    public int sendTokenCode(String phoneNumber,String sourceAddr,TokenCodeType type, String kind){
+    public TokenCodeDTO sendTokenCode(String phoneNumber, String sourceAddr, TokenCodeType type, String kind){
 
         logger.info("send code to:" + phoneNumber );
+
+        TokenCodeDTO result = new TokenCodeDTO();
 
         if (getTokenCodeService().isAbusing(phoneNumber, type,sourceAddr, sourceHourMaximum, targetHourMaximum)) {
             throw new ForbiddenException("You requested the maximum number of messages the last hour");
@@ -126,7 +129,9 @@ public class DefaultPhoneProvider implements PhoneProvider {
         TokenCodeRepresentation ongoing = getTokenCodeService().ongoingProcess(phoneNumber, type);
         if (ongoing != null) {
             logger.info(String.format("No need of sending a new %s code for %s",type.label, phoneNumber));
-            return (int) (ongoing.getExpiresAt().getTime() - Instant.now().toEpochMilli()) / 1000;
+            int expiresIn = (int) (ongoing.getExpiresAt().getTime() - Instant.now().toEpochMilli()) / 1000;
+            result.setExpiresIn(expiresIn);
+            return result;
         }
 
         TokenCodeRepresentation token = TokenCodeRepresentation.forPhoneNumber(phoneNumber);
@@ -135,6 +140,11 @@ public class DefaultPhoneProvider implements PhoneProvider {
             session.getProvider(MessageSenderService.class, service).sendSmsMessage(type,phoneNumber,token.getCode(),tokenExpiresIn,kind);
             getTokenCodeService().persistCode(token, type, tokenExpiresIn);
 
+            if (service.equalsIgnoreCase("dummy")) {
+                result.setCode(token.getCode());
+            }
+
+            result.setExpiresIn(tokenExpiresIn);
             logger.info(String.format("Sent %s code to %s over %s",type.label, phoneNumber, service));
 
         } catch (MessageSendException e) {
@@ -144,7 +154,7 @@ public class DefaultPhoneProvider implements PhoneProvider {
             throw new ServiceUnavailableException("Internal server error");
         }
 
-        return tokenExpiresIn;
+        return result;
     }
 
 }
