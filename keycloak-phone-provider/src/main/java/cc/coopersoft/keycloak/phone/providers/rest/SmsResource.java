@@ -33,6 +33,11 @@ public class SmsResource {
         return new TokenCodeResource(session, TokenCodeType.RESET);
     }
 
+    @Path("change-password")
+    public ChangePasswordResource getChangePasswordResource() {
+        return new ChangePasswordResource(session, TokenCodeType.RESET);
+    }
+
     @Path("otp-code")
     public TokenCodeResource getOTPCodeResource() {
         return new TokenCodeResource(session, TokenCodeType.OTP);

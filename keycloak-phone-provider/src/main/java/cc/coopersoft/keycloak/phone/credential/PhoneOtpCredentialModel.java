@@ -45,7 +45,7 @@ public class PhoneOtpCredentialModel extends CredentialModel {
     public static void updateOtpCredential(@NotNull UserModel user,
                                            @NotNull PhoneOtpCredentialModel.SmsOtpCredentialData credentialData,
                                            String secretValue){
-        getOtpCredentialModel(user)
+            getOtpCredentialModel(user)
             .ifPresent(credential -> {
                 try {
                     credential.setCredentialData(JsonSerialization.writeValueAsString(credentialData));

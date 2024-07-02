@@ -4,6 +4,7 @@ public class SupportPhonePages {
 
   public enum Errors{
     MISSING("requiredPhoneNumber"),
+    MISSING_CODE("requiredCodeNumber"),
 
     USER_NOT_FOUND("phoneUserNotFound"),
 

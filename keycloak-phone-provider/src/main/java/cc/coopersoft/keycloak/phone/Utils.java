@@ -18,17 +18,19 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class Utils {
     private static final Logger logger = Logger.getLogger(Utils.class);
 
     public static Optional<UserModel> findUserByPhone(KeycloakSession session,RealmModel realm, String phoneNumber){
-
+        logger.info(String.format("findUserByPhone [%s] call",phoneNumber));
         var userProvider = session.users();
         Set<String> numbers = new HashSet<>();
         numbers.add(phoneNumber);
 
         if (session.getProvider(PhoneProvider.class).compatibleMode()){
+            logger.info(String.format("findUserByPhone [%s] compatibleMode",phoneNumber));
             var phoneNumberUtil = PhoneNumberUtil.getInstance();
             try {
                 var parsedNumber = phoneNumberUtil.parse(phoneNumber, defaultRegion(session));
@@ -38,12 +40,13 @@ public class Utils {
                 for (PhoneNumberFormat format : PhoneNumberFormat.values()) {
                     numbers.add(phoneNumberUtil.format(parsedNumber, format));
                 }
+                logger.info(String.format("findUserByPhone [%s] phoneNumberUtil valid",phoneNumber));
             }catch (NumberParseException e){
                 logger.warn(String.format("%s is not a valid phone number!",phoneNumber),e);
             }
         }
 
-
+        logger.info(String.format("findUserByPhone [%s] phoneNumberUtil valid",phoneNumber));
         return numbers.stream().flatMap(number -> userProvider
             .searchForUserByUserAttributeStream(realm,"phoneNumber", number))
             .max((u1, u2) -> {
@@ -53,7 +56,6 @@ public class Utils {
                 }
                 return result;
             });
-
     }
 
 //    public static Optional<UserModel> findUserByPhone(UserProvider userProvider, RealmModel realm, String phoneNumber, String notIs){
@@ -105,12 +107,13 @@ public class Utils {
             }
 
             var canonicalizeFormat = provider.canonicalizePhoneNumber();
+            logger.info(String.format("canonicalizeFormat [%s]",canonicalizeFormat));
             try {
                 resultPhoneNumber = canonicalizeFormat
                     .map(PhoneNumberFormat::valueOf)
                     .map(format -> phoneNumberUtil.format(parsedNumber, format))
                     .orElse(resultPhoneNumber);
-            }catch (RuntimeException e){
+            } catch (RuntimeException e){
                 logger.warn(String.format("canonicalize format param error! '%s' is not in supported list: %s, E164 Will be used.",
                     Arrays.toString(PhoneNumberFormat.values()),
                     canonicalizeFormat.orElse("")),e);
@@ -118,14 +121,15 @@ public class Utils {
             }
 
             var phoneNumberRegex = provider.phoneNumberRegex();
+            logger.info(String.format("phoneNumberRegex [%s]",phoneNumberRegex));
             if (!phoneNumberRegex.map(resultPhoneNumber::matches).orElse(true)){
                 logger.info(String.format("Phone number [%s] not match regex '%s'",resultPhoneNumber, phoneNumberRegex.orElse("")));
                 throw new PhoneNumberInvalidException(PhoneNumberInvalidException.ErrorType.NOT_SUPPORTED,
                     String.format("Phone number [%s] not match regex '%s'",resultPhoneNumber, phoneNumberRegex.orElse("")));
             }
             return resultPhoneNumber;
-        }catch (NumberParseException e){
-            logger.info(e);
+        } catch (NumberParseException e){
+            logger.info("NumberParseException =" + e);
             throw new PhoneNumberInvalidException(e);
         }
     }

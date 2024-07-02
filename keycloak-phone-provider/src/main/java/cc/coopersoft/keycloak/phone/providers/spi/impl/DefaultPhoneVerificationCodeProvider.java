@@ -54,9 +54,10 @@ public class DefaultPhoneVerificationCodeProvider implements PhoneVerificationCo
 
     @Override
     public TokenCodeRepresentation ongoingProcess(String phoneNumber, TokenCodeType tokenCodeType) {
-
+        logger.info("ongoingProcess phone=" + phoneNumber + " type=" + tokenCodeType.label);
         try {
             String resultPhoneNumber = Utils.canonicalizePhoneNumber(session, phoneNumber);
+            logger.info("ongoingProcess resultPhoneNumber=" + resultPhoneNumber);
             TokenCode entity = getEntityManager()
                     .createNamedQuery("ongoingProcess", TokenCode.class)
                     .setParameter("realmId", getRealm().getId())
@@ -64,7 +65,7 @@ public class DefaultPhoneVerificationCodeProvider implements PhoneVerificationCo
                     .setParameter("now", new Date(), TemporalType.TIMESTAMP)
                     .setParameter("type", tokenCodeType.name())
                     .getSingleResult();
-
+            logger.info("ongoingProcess getCode=" + entity.getCode() + " for phone=" + phoneNumber + " type=" + tokenCodeType.name() + " id=" + entity.getId() + " confirmed=" + entity.getConfirmed());
             TokenCodeRepresentation tokenCodeRepresentation = new TokenCodeRepresentation();
 
             tokenCodeRepresentation.setId(entity.getId());
@@ -75,11 +76,15 @@ public class DefaultPhoneVerificationCodeProvider implements PhoneVerificationCo
             tokenCodeRepresentation.setExpiresAt(entity.getExpiresAt());
             tokenCodeRepresentation.setConfirmed(entity.getConfirmed());
 
+            logger.info("ongoingProcess tokenCodeRepresentation=" + tokenCodeRepresentation.getPhoneNumber());
+            logger.info("ongoingProcess tokenCodeRepresentation=" + tokenCodeRepresentation.getCode());
+
             return tokenCodeRepresentation;
         } catch (NoResultException e) {
+            logger.info("No ongoing process for phone: " + phoneNumber);
             return null;
         } catch (PhoneNumberInvalidException e) {
-            logger.warn("Invalid number: "+phoneNumber);
+            logger.info("Invalid number: "+phoneNumber);
             throw new BadRequestException("Phone number is invalid");
         }
     }
@@ -149,7 +154,6 @@ public class DefaultPhoneVerificationCodeProvider implements PhoneVerificationCo
     public void validateCode(UserModel user, String phoneNumber, String code, TokenCodeType tokenCodeType) {
 
         logger.info(String.format("valid %s , phone: %s, code: %s", tokenCodeType, phoneNumber, code));
-
         TokenCodeRepresentation tokenCode = ongoingProcess(phoneNumber, tokenCodeType);
         if (tokenCode == null)
             throw new BadRequestException(String.format("There is no valid ongoing %s process", tokenCodeType.label));
@@ -166,7 +170,7 @@ public class DefaultPhoneVerificationCodeProvider implements PhoneVerificationCo
 
     @Override
     public void tokenValidated(UserModel user, String phoneNumber, String tokenCodeId, boolean isOTP) {
-
+        logger.info(String.format("tokenValidated User %s validated the code %s", user.getId(), tokenCodeId));
         boolean updateUserPhoneNumber = !isOTP;
         if (isOTP){
             updateUserPhoneNumber = PhoneOtpCredentialModel.getSmsOtpCredentialData(user)
@@ -178,6 +182,7 @@ public class DefaultPhoneVerificationCodeProvider implements PhoneVerificationCo
 
 
         if (updateUserPhoneNumber){
+            logger.info(String.format("tokenValidated updateUserPhoneNumber %s validated the code %s", user.getId(), tokenCodeId));
             if (!Utils.isDuplicatePhoneAllowed(session)){
                 session.users()
                     .searchForUserByUserAttributeStream(session.getContext().getRealm(),"phoneNumber", phoneNumber)

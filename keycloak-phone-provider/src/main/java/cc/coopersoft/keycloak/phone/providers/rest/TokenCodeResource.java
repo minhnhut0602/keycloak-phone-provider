@@ -34,6 +34,8 @@ import org.keycloak.userprofile.UserProfile;
 import org.keycloak.userprofile.UserProfileContext;
 import org.keycloak.userprofile.UserProfileProvider;
 import org.keycloak.utils.StringUtil;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 import static cc.coopersoft.keycloak.phone.authentication.forms.SupportPhonePages.FIELD_PHONE_NUMBER;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
@@ -57,8 +59,15 @@ public class TokenCodeResource {
   @Produces(APPLICATION_JSON)
   public Response getTokenCode(@NotBlank @QueryParam("phoneNumber") String phoneNumber,
                                @QueryParam("kind") String kind) {
+    logger.info("getTokenCode with phoneNumber: " + phoneNumber);
+    logger.info("getTokenCode with kind: " + kind);
 
     if (Validation.isBlank(phoneNumber)) throw new BadRequestException("Must supply a phone number");
+
+    if (phoneNumber.contains("%2B")) { // +
+      phoneNumber = URLDecoder.decode(phoneNumber, StandardCharsets.UTF_8);
+      logger.info("getTokenCode with decode phoneNumber: " + phoneNumber);
+    }
 
     var phoneProvider = session.getProvider(PhoneProvider.class);
 
@@ -66,6 +75,8 @@ public class TokenCodeResource {
       phoneNumber = Utils.canonicalizePhoneNumber(session,phoneNumber);
     } catch (PhoneNumberInvalidException e) {
       throw new BadRequestException("Phone number is invalid");
+    } catch (Exception e) {
+      throw new BadRequestException(e.getMessage());
     }
 
     // everybody phones authenticator send AUTH code
@@ -92,8 +103,8 @@ public class TokenCodeResource {
   public Response createUser(@NotBlank PhoneUserRepresentation representation) {
     String phoneNumber = representation.getPhoneNumber();
     String verificationCode = representation.getCode();
-    if (StringUtil.isBlank(phoneNumber)) throw new BadRequestException("Must inform a phone number");
-    if (StringUtil.isBlank(verificationCode)) throw new BadRequestException("Must inform a token code");
+    if (StringUtil.isBlank(phoneNumber)) throw new BadRequestException(SupportPhonePages.Errors.MISSING.message());
+    if (StringUtil.isBlank(verificationCode)) throw new BadRequestException(SupportPhonePages.Errors.MISSING_CODE.message());
 
     try {
       phoneNumber = Utils.canonicalizePhoneNumber(session, phoneNumber);
@@ -103,7 +114,11 @@ public class TokenCodeResource {
     }
 
     TokenCodeRepresentation tokenCode = getTokenCodeService(session).ongoingProcess(phoneNumber, TokenCodeType.REGISTRATION);
+    logger.info("verificationCode = " + verificationCode);
+    logger.info("tokenCode = " + tokenCode);
     if (Validation.isBlank(verificationCode) || tokenCode == null || !tokenCode.getCode().equals(verificationCode)) {
+      logger.info("NOT_MATCH verificationCode = " + verificationCode);
+      logger.info("NOT_MATCH tokenCode = " + tokenCode);
       throw new BadRequestException(SupportPhonePages.Errors.NOT_MATCH.message());
     }
     session.setAttribute("tokenId", tokenCode.getId());
@@ -116,34 +131,42 @@ public class TokenCodeResource {
     formData.add(UserModel.LAST_NAME, representation.getLastName());
 
     UserProfileProvider profileProvider = session.getProvider(UserProfileProvider.class);
-    UserProfile profile = profileProvider.create(UserProfileContext.REGISTRATION, formData);
-    UserModel user = profile.create();
-    user.setUsername(phoneNumber);
-    user.setEmailVerified(true);
-    user.setEnabled(true);
-    user.setSingleAttribute("registered_platform", representation.getPlatform());
-    user.setSingleAttribute("accountStatus", "ACTIVE");
-    user.setSingleAttribute("lang_key", representation.getLangKey());
-    user.setSingleAttribute("is_approved", "true");
-    user.setSingleAttribute("is_terminated", "false");
+    try {
+      UserProfile profile = profileProvider.create(UserProfileContext.REGISTRATION, formData);
+      UserModel user = profile.create();
+      user.setUsername(phoneNumber);
+      user.setEmailVerified(true);
+      user.setEnabled(true);
+      user.setSingleAttribute("registered_platform", representation.getPlatform());
+      user.setSingleAttribute("accountStatus", "ACTIVE");
+      user.setSingleAttribute("lang_key", representation.getLangKey());
+      user.setSingleAttribute("is_approved", "true");
+      user.setSingleAttribute("is_terminated", "false");
 
-    String tokenId = session.getAttribute("tokenId", String.class);
-    logger.info(String.format("registration user %s phone success, tokenId is: %s", user.getId(), tokenId));
-    getTokenCodeService(session).tokenValidated(user, phoneNumber, tokenId,false);
+      String tokenId = session.getAttribute("tokenId", String.class);
+      logger.info(String.format("registration user %s phone success, tokenId is: %s", user.getId(), tokenId));
+      getTokenCodeService(session).tokenValidated(user, phoneNumber, tokenId,false);
 
-    PhoneOtpCredentialProvider ocp = (PhoneOtpCredentialProvider) session
-      .getProvider(CredentialProvider.class, PhoneOtpCredentialProviderFactory.PROVIDER_ID);
-    ocp.createCredential(session.getContext().getRealm(), user, PhoneOtpCredentialModel.create(phoneNumber,tokenId,0));
+      PhoneOtpCredentialProvider ocp = (PhoneOtpCredentialProvider) session
+        .getProvider(CredentialProvider.class, PhoneOtpCredentialProviderFactory.PROVIDER_ID);
+      ocp.createCredential(session.getContext().getRealm(), user, PhoneOtpCredentialModel.create(phoneNumber,tokenId,0));
 
-    // save password
-    Pbkdf2Sha256PasswordHashProviderFactory factory = new Pbkdf2Sha256PasswordHashProviderFactory();
+      // save password
+      Pbkdf2Sha256PasswordHashProviderFactory factory = new Pbkdf2Sha256PasswordHashProviderFactory();
 
-    System.setProperty("keycloak." + PasswordHashSpi.NAME + "." + Pbkdf2Sha256PasswordHashProviderFactory.ID + "." + AbstractPbkdf2PasswordHashProviderFactory.MAX_PADDING_LENGTH_PROPERTY,
-      String.valueOf(0));
-    factory.init(Config.scope(PasswordHashSpi.NAME, Pbkdf2Sha256PasswordHashProviderFactory.ID));
-    PasswordHashProvider pbkdf2HashProvider = factory.create(null);
-    CredentialModel passwordCred = pbkdf2HashProvider.encodedCredential(representation.getPassword(), ITERATIONS);
-    user.credentialManager().createStoredCredential(passwordCred);
+      System.setProperty("keycloak." + PasswordHashSpi.NAME + "." + Pbkdf2Sha256PasswordHashProviderFactory.ID + "." + AbstractPbkdf2PasswordHashProviderFactory.MAX_PADDING_LENGTH_PROPERTY,
+        String.valueOf(0));
+      factory.init(Config.scope(PasswordHashSpi.NAME, Pbkdf2Sha256PasswordHashProviderFactory.ID));
+      PasswordHashProvider pbkdf2HashProvider = factory.create(null);
+      CredentialModel passwordCred = pbkdf2HashProvider.encodedCredential(representation.getPassword(), ITERATIONS);
+      user.credentialManager().createStoredCredential(passwordCred);
+    } catch (Exception e) {
+      logger.error("Error=" + e.getMessage());
+      if (e.getMessage().contains("usernameExistsMessage")) {
+        throw new BadRequestException(SupportPhonePages.Errors.EXISTS.message());
+      }
+    }
+
     return Response.noContent().build();
   }
 
